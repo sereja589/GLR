@@ -37,7 +37,7 @@ namespace {
         Shift,
         Reduce,
         Accept,
-        Error
+//        Error
     };
 
     class TAction {
@@ -70,6 +70,14 @@ namespace {
             return StateOrRuleId;
         }
 
+        friend bool operator==(const TAction& lhs, const TAction& rhs) {
+            return std::tie(lhs.Type, lhs.StateOrRuleId) == std::tie(rhs.Type, rhs.StateOrRuleId);
+        }
+
+        friend bool operator!=(const TAction& lhs, const TAction& rhs) {
+            return !(rhs == lhs);
+        }
+
     private:
         EActionType Type;
         size_t StateOrRuleId = 0;  // TODO Разделить, так как типы могут стать разными
@@ -84,20 +92,20 @@ namespace {
         friend std::tuple<TActionTable, TGotoTable, TState> BuildTables(const TGrammar& grammar);
 
     public:
-        TAction GetAction(TState state, TTerminal terminal) const {
+        std::vector<TAction> GetActions(TState state, TTerminal terminal) const {
             auto itState = Table.find(state);
             if (itState == Table.end()) {
-                return TAction(EActionType::Error);
+                return {};
             }
             auto it = itState->second.find(terminal);
             if (it == itState->second.end()) {
-                return TAction(EActionType::Error);
+                return {};
             }
             return it->second;
         }
 
     private:
-        std::unordered_map<TState, std::unordered_map<TTerminal, TAction>> Table; // TODO use vector instead first map
+        std::unordered_map<TState, std::unordered_map<TTerminal, std::vector<TAction>>> Table; // TODO use vector instead first map
     };
 
     class TGotoTable {
@@ -424,13 +432,25 @@ namespace {
                         if (it == setsOfItems.end()) {
                             throw std::runtime_error("Not found goto set in canonical system");
                         }
-                        actionTable.Table[i][term] = TAction(EActionType::Shift, it - setsOfItems.begin());
+                        auto& actions = actionTable.Table[i][term];
+                        TAction action(EActionType::Shift, it - setsOfItems.begin());
+                        if (std::count(actions.begin(), actions.end(), action) == 0) {
+                            actions.push_back(action);
+                        }
                     }
                 } else {
                     if (item.NonTerminal != grammar.StartNonTerminal) {
-                        actionTable.Table[i][item.Next] = TAction(EActionType::Reduce, item.RuleId);
+                        auto& actions = actionTable.Table[i][item.Next];
+                        TAction action(EActionType::Reduce, item.RuleId);
+                        if (std::count(actions.begin(), actions.end(), action) == 0) {
+                            actions.push_back(action);
+                        }
                     } else if (item.Left.size() == 1 && item.Right.empty() && IsEmpty(item.Next)) {
-                        actionTable.Table[i][EMPTY_TERMINAL] = TAction(EActionType::Accept);
+                        auto& actions = actionTable.Table[i][EMPTY_TERMINAL];
+                        TAction action(EActionType::Accept);
+                        if (std::count(actions.begin(), actions.end(), action) == 0) {
+                            actions.push_back(action);
+                        }
                     }
                 }
             }
@@ -574,7 +594,15 @@ public:
         bool finish = false;
         while (true) {
             TTerminal terminal = i < input.size() ? input[i] : EMPTY_TERMINAL;
-            auto action = ActionTable.GetAction(stateStack.back(), terminal);
+            auto actions = ActionTable.GetActions(stateStack.back(), terminal);
+            if (actions.empty()) {
+                std::cout << "TTerminal: " << ToString(terminal) << ", state: " << stateStack.back() << ", Error" << std::endl;
+                throw std::runtime_error("Parse Error");
+            }
+            if (actions.size() != 1) {
+                throw std::runtime_error("Multiply actions yet is not supported, size: " + std::to_string(actions.size()));
+            }
+            const auto& action = actions[0];
             switch (action.GetType()) {
                 case EActionType::Shift:
                     std::cout << "TTerminal: " << ToString(terminal) << ", state: " << stateStack.back() << ", Shift " << action.GetState() << std::endl;
@@ -610,9 +638,6 @@ public:
                 case EActionType::Accept:
                     finish = true;
                     break;
-                case EActionType::Error:
-                    std::cout << "TTerminal: " << ToString(terminal) << ", state: " << stateStack.back() << ", Error" << std::endl;
-                    throw std::runtime_error("Parse Error");
             }
             if (finish) {
                 break;
