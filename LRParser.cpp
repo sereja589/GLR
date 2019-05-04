@@ -84,7 +84,7 @@ namespace {
         friend std::tuple<TActionTable, TGotoTable, TState> BuildTables(const TGrammar& grammar);
 
     public:
-        TAction GetAction(TState state, const TTerminal& terminal) const {
+        TAction GetAction(TState state, TTerminal terminal) const {
             auto itState = Table.find(state);
             if (itState == Table.end()) {
                 return TAction(EActionType::Error);
@@ -105,7 +105,7 @@ namespace {
 
     public:
         // std::nullopt is error
-        std::optional<TState> GetState(TState state, const TNonTerminal& nonTerminal) const {
+        std::optional<TState> GetState(TState state, TNonTerminal nonTerminal) const {
             auto itState = Table.find(state);
             if (itState == Table.end()) {
                 return std::nullopt;
@@ -137,24 +137,11 @@ namespace {
         }
     };
 
-    std::string ToString(const TTerminal& terminal) {
-        if (IsEmpty(terminal)) {
+    std::string ToString(TGrammarSymbol symbol) {
+        if (IsEmpty(symbol)) {
             return "{eps}";
         }
-        return terminal;
-    }
-
-    std::string ToString(TNonTerminal nonTerminal) {
-        std::stringstream ss;
-        ss << nonTerminal;
-        return ss.str();
-    }
-
-    std::string ToString(const TGrammarSymbol& symbol) {
-        if (auto term = std::get_if<TTerminal>(&symbol)) {
-            return ToString(*term);
-        }
-        return ToString(std::get<TNonTerminal>(symbol));
+        return std::to_string(symbol);
     }
 
     std::string ToString(const TLrItem& lrItem) {
@@ -215,10 +202,10 @@ namespace {
                 first[rule.Left];
             }
             for (const auto& symbol : rule.Right) {
-                if (auto nonTerm = std::get_if<TNonTerminal>(&symbol)) {
+                if (grammar.SymbolTypes[symbol] == TGrammar::ESymbolType::NonTerminal) {
                     first[symbol];
                 } else {
-                    first[symbol].insert(std::get<TTerminal>(symbol));
+                    first[symbol].insert(symbol);
                 }
             }
         }
@@ -296,11 +283,12 @@ namespace {
                 if (item.Right.empty()) {
                     continue;
                 }
-                if (auto nonTerm = std::get_if<TNonTerminal>(&item.Right[0])) {
+                if (grammar.SymbolTypes[item.Right[0]] == TGrammar::ESymbolType::NonTerminal) {
+                    auto nonTerm = item.Right[0];
                     /// TODO optimize it
                     for (size_t ruleId = 0; ruleId < grammar.Rules.size(); ++ruleId) {
                         const auto& rule = grammar.Rules[ruleId];
-                        if (rule.Left == *nonTerm) {
+                        if (rule.Left == nonTerm) {
                             std::vector<TGrammarSymbol> seq(item.Right.begin() + 1, item.Right.end());
                             if (item.Next != EMPTY_TERMINAL) {
                                 seq.push_back(item.Next);
@@ -331,7 +319,7 @@ namespace {
         return result;
     }
 
-    TLrItemSet GoTo(const TLrItemSet& s, const TGrammarSymbol& x, const TGrammar& grammar, const std::unordered_map<TGrammarSymbol, std::unordered_set<TTerminal>>& firstForSmybols) {
+    TLrItemSet GoTo(const TLrItemSet& s, TGrammarSymbol x, const TGrammar& grammar, const std::unordered_map<TGrammarSymbol, std::unordered_set<TTerminal>>& firstForSmybols) {
         TLrItemSet result;
         for (const auto& item : s) {
             if (!item.Right.empty() && item.Right[0] == x) {
@@ -358,7 +346,7 @@ namespace {
             throw std::runtime_error("Must be only one rule with start nonterminal");
         }
         const auto& ruleWithStartNonTerm = grammar.Rules[rulesWithStartNonTerm[0]];
-        if (ruleWithStartNonTerm.Right.size() != 1 || !std::get_if<TNonTerminal>(&ruleWithStartNonTerm.Right[0])) {
+        if (ruleWithStartNonTerm.Right.size() != 1 || grammar.SymbolTypes[ruleWithStartNonTerm.Right[0]] != TGrammar::ESymbolType::NonTerminal) {
             throw std::runtime_error("Start rule must be have Right part with len 1");
         }
         startItem.Right = ruleWithStartNonTerm.Right;
@@ -426,8 +414,9 @@ namespace {
         for (size_t i = 0; i < setsOfItems.size(); ++i) {
             for (const auto& item : setsOfItems[i]) {
                 if (!item.Right.empty()) {
-                    if (auto term = std::get_if<TTerminal>(&item.Right[0])) {
-                        auto nextSet = GoTo(setsOfItems[i], *term, grammar, firstForSymbols);
+                    if (grammar.SymbolTypes[item.Right[0]] == TGrammar::ESymbolType::Terminal) {
+                        auto term = item.Right[0];
+                        auto nextSet = GoTo(setsOfItems[i], term, grammar, firstForSymbols);
                         if (nextSet.empty()) {
                             continue;
                         }
@@ -435,7 +424,7 @@ namespace {
                         if (it == setsOfItems.end()) {
                             throw std::runtime_error("Not found goto set in canonical system");
                         }
-                        actionTable.Table[i][*term] = TAction(EActionType::Shift, it - setsOfItems.begin());
+                        actionTable.Table[i][term] = TAction(EActionType::Shift, it - setsOfItems.begin());
                     }
                 } else {
                     if (item.NonTerminal != grammar.StartNonTerminal) {
@@ -451,8 +440,8 @@ namespace {
 
         for (size_t i = 0; i < setsOfItems.size(); ++i) {
             for (const auto& symbol : grammarSymbols) {
-                if (auto nonTerm = std::get_if<TNonTerminal>(&symbol)) {
-                    auto nextSet = GoTo(setsOfItems[i], *nonTerm, grammar, firstForSymbols);
+                if (grammar.SymbolTypes[symbol] == TGrammar::ESymbolType::NonTerminal) {
+                    auto nextSet = GoTo(setsOfItems[i], symbol, grammar, firstForSymbols);
                     if (nextSet.empty()) {
                         continue;
                     }
@@ -460,7 +449,7 @@ namespace {
                     if (it == setsOfItems.end()) {
                         throw std::runtime_error("Not found goto set in canonical system");
                     }
-                    gotoTable.Table[i][*nonTerm] = it - setsOfItems.begin();
+                    gotoTable.Table[i][symbol] = it - setsOfItems.begin();
                 }
             }
         }
@@ -497,13 +486,13 @@ namespace {
 
 }
 
-bool IsEmpty(const TTerminal& terminal) {
-    return terminal.empty();
+bool IsEmpty(TTerminal terminal) {
+    return terminal == EMPTY_TERMINAL;
 }
 
 class TShiftNode : public IASTNode {
 public:
-    TShiftNode(const std::string& lexem, const TTerminal& terminal)
+    TShiftNode(const std::string& lexem, TTerminal terminal)
         : Lexem(lexem)
         , Symbol(terminal)
     {
@@ -517,7 +506,7 @@ public:
         return {};
     }
 
-    const TGrammarSymbol& GetSymbol() const override {
+    TGrammarSymbol GetSymbol() const override {
         return Symbol;
     }
 
@@ -550,7 +539,7 @@ public:
         return result;
     }
 
-    const TGrammarSymbol& GetSymbol() const override {
+    TGrammarSymbol GetSymbol() const override {
         return Symbol;
     }
 
@@ -575,7 +564,7 @@ public:
         StartState = startState;
     }
 
-    IASTNode::TPtr Parse(const std::vector<TTerminal>& input) const override {
+    std::vector<IASTNode::TPtr> Parse(const std::vector<TTerminal>& input) const override {
         std::cout << "Parse:" << std::endl;
         std::vector<size_t> rules;
         std::vector<TState> stateStack;
@@ -590,7 +579,7 @@ public:
                 case EActionType::Shift:
                     std::cout << "TTerminal: " << ToString(terminal) << ", state: " << stateStack.back() << ", Shift " << action.GetState() << std::endl;
                     stateStack.push_back(action.GetState());
-                    nodeStack.push_back(std::make_unique<TShiftNode>(input[i], terminal));
+                    nodeStack.push_back(std::make_unique<TShiftNode>("", terminal));
                     ++i;
                     break;
                 case EActionType::Reduce: {
@@ -630,7 +619,9 @@ public:
             }
         }
         assert(nodeStack.size() == 1);
-        return std::move(nodeStack[0]);
+        std::vector<IASTNode::TPtr> result;
+        result.push_back(std::move(nodeStack[0]));
+        return result;
     }
 
 private:
