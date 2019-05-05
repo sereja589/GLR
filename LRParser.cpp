@@ -710,6 +710,9 @@ private:
                 continue;
             }
             auto actions = ActionTable.GetActions(stack.StateStack.back(), terminal);
+            actions.erase(std::remove_if(actions.begin(), actions.end(), [](const TAction& action) {
+               return action.GetType() != EActionType::Shift;
+            }), actions.end());
             if (actions.size() != 1) {
                 throw std::runtime_error("Expected not greater than one action");
             }
@@ -779,8 +782,7 @@ public:
 
     std::vector<IASTNode::TPtr> Parse(const std::vector<TTerminal>& input) const override {
         TGLRProcessor processor(Grammar, ActionTable, GotoTable, StartState);
-        for (size_t i = 0; i < input.size(); ++i) {
-            TTerminal terminal = input[i];
+        for (auto terminal : input) {
             processor.Handle(terminal);
         }
         processor.Handle(EMPTY_TERMINAL);
