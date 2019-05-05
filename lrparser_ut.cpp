@@ -1,7 +1,3 @@
-//
-// Created by Sergey Novichkov on 2019-02-24.
-//
-
 #include <LRParser.h>
 #include <tuple>
 #include <gtest/gtest.h>
@@ -82,7 +78,7 @@ namespace {
 
         TTreeBuilder& Root(size_t nonTerminal) {
             assert(Root_ == nullptr);
-            Root_ = std::make_unique<TReduceNode>(nonTerminal);
+            Root_ = std::make_shared<TReduceNode>(nonTerminal);
             Stack.push_back(Root_.get());
             return *this;
         }
@@ -100,7 +96,7 @@ namespace {
     private:
         template <typename T, typename... TArgs>
         TTreeBuilder& AddChild(bool addToStack, TArgs&&... args) {
-            auto node = std::make_unique<T>(std::forward<TArgs>(args)...);
+            auto node = std::make_shared<T>(std::forward<TArgs>(args)...);
             auto rawNode = node.get();
             dynamic_cast<TReduceNode*>(Stack.back())->AddChild(std::move(node));
             if (addToStack) {
@@ -291,7 +287,7 @@ TEST(LrParserTest, Test2) {
     EXPECT_TRUE(CompareTree(trees[0].get(), expectedTree.get()));
 
     input = {terminals["("], terminals["id"], terminals["+"], terminals["id"]};
-    EXPECT_ANY_THROW(parser->Parse(input));
+    EXPECT_EQ(parser->Parse(input).size(), 0);
 
     input = {
         terminals["("], terminals["id"], terminals["+"], terminals["id"], terminals[")"], terminals["*"],

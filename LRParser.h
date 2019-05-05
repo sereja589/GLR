@@ -64,7 +64,7 @@ private:
 
 class IASTNode {
 public:
-    using TPtr = std::unique_ptr<IASTNode>;
+    using TPtr = std::shared_ptr<IASTNode>;
 
 public:
     virtual ~IASTNode() = default;

@@ -1,11 +1,10 @@
-//
-// Created by Sergey Novichkov on 2019-02-19.
-//
+#include "LRParser.h"
 
 #include <unordered_set>
 #include <iostream>
 #include <sstream>
-#include "LRParser.h"
+#include <queue>
+#include <list>
 
 template <typename T>
 inline void HashCombine(size_t& seed, const T& v)
@@ -37,7 +36,6 @@ namespace {
         Shift,
         Reduce,
         Accept,
-//        Error
     };
 
     class TAction {
@@ -74,9 +72,9 @@ namespace {
             return std::tie(lhs.Type, lhs.StateOrRuleId) == std::tie(rhs.Type, rhs.StateOrRuleId);
         }
 
-        friend bool operator!=(const TAction& lhs, const TAction& rhs) {
-            return !(rhs == lhs);
-        }
+        // friend bool operator!=(const TAction& lhs, const TAction& rhs) {
+        //     return !(rhs == lhs);
+        // }
 
     private:
         EActionType Type;
@@ -140,9 +138,9 @@ namespace {
             return std::tie(lhs.NonTerminal, lhs.Left, lhs.Right, lhs.Next, lhs.RuleId) == std::tie(rhs.NonTerminal, rhs.Left, rhs.Right, rhs.Next, rhs.RuleId);
         }
 
-        friend bool operator!=(const TLrItem& lhs, const TLrItem& rhs) {
-            return !(lhs == rhs);
-        }
+        // friend bool operator!=(const TLrItem& lhs, const TLrItem& rhs) {
+        //     return !(lhs == rhs);
+        // }
     };
 
     std::string ToString(TGrammarSymbol symbol) {
@@ -480,7 +478,7 @@ namespace {
             throw std::runtime_error("Must be only one rule with start nonterminal");
         }
 
-        TState startState;
+        TState startState = 0;
 
         TLrItem startLrItem;
         startLrItem.NonTerminal = grammar.StartNonTerminal;
@@ -503,7 +501,6 @@ namespace {
 
         return {actionTable, gotoTable, startState};
     }
-
 }
 
 bool IsEmpty(TTerminal terminal) {
@@ -572,6 +569,202 @@ private:
     std::vector<IASTNode::TPtr> Children;
 };
 
+class TStacks {
+public:
+    explicit TStacks(TState startState) {
+        auto& stacks = Stacks.emplace_back();
+        stacks.StateStack.push_back(startState);
+    }
+
+    size_t StackCount() const {
+        return Stacks.size();
+    }
+
+    TState TopState(size_t stack) const {
+        return Stacks[stack].StateStack.back();
+    }
+
+    IASTNode::TPtr&& TopNode(size_t stack) {
+        return std::move(Stacks[stack].NodeStack.back());
+    }
+
+    void Shift(TTerminal terminal, TState nextState) {
+        for (auto& stackPair : Stacks) {
+            stackPair.StateStack.push_back(nextState);
+            stackPair.NodeStack.push_back(std::make_shared<TShiftNode>("", terminal));
+        }
+    }
+
+private:
+    using TStateStack = std::vector<TState>;
+    using TNodeStack = std::vector<IASTNode::TPtr>;
+
+    struct TStackPair {
+        TStateStack StateStack;
+        TNodeStack NodeStack;
+    };
+
+private:
+    std::vector<TStackPair> Stacks = {};
+};
+
+class TGLRProcessor {
+public:
+    TGLRProcessor(const TGrammar& grammar, const TActionTable& actionTable, const TGotoTable& gotoTable, TState startState)
+        : Grammar(grammar)
+        , ActionTable(actionTable)
+        , GotoTable(gotoTable)
+    {
+        auto& stack = Stacks.emplace_back();
+        stack.StateStack.push_back(startState);
+    }
+
+    void Handle(TTerminal terminal) {
+        if (Stacks.empty()) {
+            throw std::runtime_error("Parsing failed: no stacks");
+        }
+
+        ReduceAll(terminal);
+        ShiftAll(terminal);
+    }
+
+    std::vector<IASTNode::TPtr> GetAccepted() {
+        std::vector<IASTNode::TPtr> result;
+        for (const auto& stack : Stacks) {
+            if (stack.Accepted) {
+                if (stack.NodeStack.size() != 1) {
+                    throw std::runtime_error("Node stack size is greater than 1 for accepted stack");
+                }
+                result.push_back(stack.NodeStack[0]);
+            }
+        }
+        return result;
+    }
+
+private:
+    using TStateStack = std::vector<TState>;
+    using TNodeStack = std::vector<IASTNode::TPtr>;
+
+    struct TStackPair {
+        TStateStack StateStack;
+        TNodeStack NodeStack;
+        bool Accepted = false;
+    };
+
+    using TStackIterator = std::list<TStackPair>::iterator;
+
+private:
+    void ReduceAll(TTerminal terminal) {
+        std::queue<TStackIterator> stacksForReduce;
+        for (auto it = Stacks.begin(); it != Stacks.end(); ++it) {
+            stacksForReduce.push(it);
+        }
+
+        while (!stacksForReduce.empty()) {
+            auto currentStack = stacksForReduce.front();
+            stacksForReduce.pop();
+            const auto& actions = ActionTable.GetActions(currentStack->StateStack.back(), terminal);
+            if (actions.empty()) {
+                Stacks.erase(currentStack);
+                continue;
+            }
+
+            if (actions.size() == 1) {
+                const auto& action = actions[0];
+                switch (action.GetType()) {
+                    case EActionType::Reduce:
+                        Reduce(*currentStack, action.GetRuleId());
+                        stacksForReduce.push(currentStack);
+                        break;
+                    case EActionType::Accept:
+                        currentStack->Accepted = true;
+                        break;
+                    case EActionType::Shift:
+                        break;
+                }
+                continue;
+            }
+
+            bool wasShift = false;
+            for (size_t i = 0; i < actions.size(); ++i) {
+                const auto& action = actions[i];
+                if (action.GetType() == EActionType::Accept) {
+                    throw std::runtime_error("There are other actions along with accept action");
+                } else if (action.GetType() == EActionType::Reduce) {
+                    if (i != actions.size() - 1 || wasShift) { // clone stack
+                        Stacks.push_back(*currentStack);
+                        currentStack = std::prev(Stacks.end());
+                    }
+                    Reduce(*currentStack, action.GetRuleId());
+                    stacksForReduce.push(currentStack);
+                } else if (action.GetType() == EActionType::Shift) {
+                    wasShift = true;
+                }
+            }
+        }
+    }
+
+    void ShiftAll(TTerminal terminal) {
+        for (auto& stack : Stacks) {
+            if (stack.Accepted) {
+                continue;
+            }
+            auto actions = ActionTable.GetActions(stack.StateStack.back(), terminal);
+            if (actions.size() != 1) {
+                throw std::runtime_error("Expected not greater than one action");
+            }
+
+            const auto& action = actions[0];
+            if (action.GetType() != EActionType::Shift) {
+                throw std::runtime_error("Expected shift action only");
+            }
+
+            Shift(stack, terminal, action.GetState());
+        }
+    }
+
+    void Shift(TStackPair& stack, TTerminal terminal, TState nextState) {
+        stack.StateStack.push_back(nextState);
+        stack.NodeStack.push_back(std::make_shared<TShiftNode>("", terminal));
+    }
+
+    void Reduce(TStackPair& stack, size_t ruleId) {
+        auto& [stateStack, nodeStack, stackIsAccepted] = stack;
+        if (stackIsAccepted) {
+            throw std::runtime_error("Was try to reduce accepted stack");
+        }
+
+        const auto& rule = Grammar.Rules[ruleId];
+
+        for (size_t i = 0; i < rule.Right.size(); ++i) {
+            stateStack.pop_back();
+        }
+        auto nextState = GotoTable.GetState(stateStack.back(), rule.Left);
+        if (!nextState) {
+            throw std::runtime_error("Parse Error");
+        }
+        std::cout << "Next state: " << *nextState << std::endl;
+        stateStack.push_back(*nextState);
+
+        std::vector<IASTNode::TPtr> children;
+        size_t startPos = nodeStack.size() - rule.Right.size();
+        for (size_t j = startPos; j < nodeStack.size(); ++j) {
+            children.push_back(std::move(nodeStack[j]));
+        }
+        for (size_t j = 0; j < rule.Right.size(); ++j) {
+            nodeStack.pop_back();
+        }
+        auto node = std::make_shared<TReduceNode>(rule.Left, std::move(children));
+        nodeStack.push_back(std::move(node));
+    }
+
+private:
+    const TGrammar& Grammar;
+    const TActionTable& ActionTable;
+    const TGotoTable& GotoTable;
+    std::list<TStackPair> Stacks;
+};
+
 class TGLRParser : public IGLRParser {
 public:
     explicit TGLRParser(const TGrammar& grammar)
@@ -585,68 +778,13 @@ public:
     }
 
     std::vector<IASTNode::TPtr> Parse(const std::vector<TTerminal>& input) const override {
-        std::cout << "Parse:" << std::endl;
-        std::vector<size_t> rules;
-        std::vector<TState> stateStack;
-        stateStack.push_back(StartState);
-        std::vector<IASTNode::TPtr> nodeStack;
-        size_t i = 0;
-        bool finish = false;
-        while (true) {
-            TTerminal terminal = i < input.size() ? input[i] : EMPTY_TERMINAL;
-            auto actions = ActionTable.GetActions(stateStack.back(), terminal);
-            if (actions.empty()) {
-                std::cout << "TTerminal: " << ToString(terminal) << ", state: " << stateStack.back() << ", Error" << std::endl;
-                throw std::runtime_error("Parse Error");
-            }
-            if (actions.size() != 1) {
-                throw std::runtime_error("Multiply actions yet is not supported, size: " + std::to_string(actions.size()));
-            }
-            const auto& action = actions[0];
-            switch (action.GetType()) {
-                case EActionType::Shift:
-                    std::cout << "TTerminal: " << ToString(terminal) << ", state: " << stateStack.back() << ", Shift " << action.GetState() << std::endl;
-                    stateStack.push_back(action.GetState());
-                    nodeStack.push_back(std::make_unique<TShiftNode>("", terminal));
-                    ++i;
-                    break;
-                case EActionType::Reduce: {
-                    std::cout << "TTerminal: " << ToString(terminal) << ", state: " << stateStack.back() << ", Reduce " << action.GetRuleId() << std::endl;
-                    const auto& rule = Grammar.Rules[action.GetRuleId()];
-                    for (size_t j = 0; j < rule.Right.size(); ++j) {
-                        stateStack.pop_back();
-                    }
-                    std::vector<IASTNode::TPtr> children;
-                    size_t startPos = nodeStack.size() - rule.Right.size();
-                    for (size_t j = startPos; j < nodeStack.size(); ++j) {
-                        children.push_back(std::move(nodeStack[j]));
-                    }
-                    for (size_t j = 0; j < rule.Right.size(); ++j) {
-                        nodeStack.pop_back();
-                    }
-                    auto nextState = GotoTable.GetState(stateStack.back(), rule.Left);
-                    if (!nextState) {
-                        throw std::runtime_error("Parse Error");
-                    }
-                    std::cout << "Next state: " << *nextState << std::endl;
-                    stateStack.push_back(*nextState);
-                    rules.push_back(action.GetRuleId());
-                    auto node = std::make_unique<TReduceNode>(Grammar.Rules[action.GetRuleId()].Left, std::move(children));
-                    nodeStack.push_back(std::move(node));
-                    break;
-                }
-                case EActionType::Accept:
-                    finish = true;
-                    break;
-            }
-            if (finish) {
-                break;
-            }
+        TGLRProcessor processor(Grammar, ActionTable, GotoTable, StartState);
+        for (size_t i = 0; i < input.size(); ++i) {
+            TTerminal terminal = input[i];
+            processor.Handle(terminal);
         }
-        assert(nodeStack.size() == 1);
-        std::vector<IASTNode::TPtr> result;
-        result.push_back(std::move(nodeStack[0]));
-        return result;
+        processor.Handle(EMPTY_TERMINAL);
+        return processor.GetAccepted();
     }
 
 private:
