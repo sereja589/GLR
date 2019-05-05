@@ -1,4 +1,4 @@
-#include "LRParser.h"
+#include "grl.h"
 
 #include <unordered_set>
 #include <iostream>

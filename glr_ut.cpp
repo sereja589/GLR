@@ -1,4 +1,4 @@
-#include <LRParser.h>
+#include <grl.h>
 #include <tuple>
 #include <gtest/gtest.h>
 
