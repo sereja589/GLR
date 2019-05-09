@@ -8,7 +8,10 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 include_directories(${CMAKE_SOURCE_DIR})
 
 add_subdirectory(googletest)
-add_executable(tomita main.cpp grl.cpp grl.h)
 
-add_executable(glr_test glr_ut.cpp grl.cpp)
+set(SOURCE_FILES grammar.h grammar.cpp grl.cpp grl.h graph_structured_stack.h glr_tables.h glr_tables.cpp)
+
+add_executable(tomita main.cpp ${SOURCE_FILES})
+
+add_executable(glr_test glr_ut.cpp ${SOURCE_FILES})
 target_link_libraries(glr_test gtest_main)
