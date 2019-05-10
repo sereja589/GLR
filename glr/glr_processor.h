@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grl.h"
+#include "glr.h"
 #include "glr_tables.h"
 #include <memory>
 #include <unordered_map>
