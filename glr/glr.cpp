@@ -19,69 +19,6 @@ namespace {
         grammar.StartNonTerminal = nextNonTerminal;
     }
 }
-
-class TShiftNode : public IASTNode {
-public:
-    TShiftNode(const std::string& lexem, TTerminal terminal)
-        : Lexem(lexem)
-        , Symbol(terminal)
-    {
-    }
-
-    EType GetType() const override {
-        return EType::Shift;
-    }
-
-    std::vector<const IASTNode*> GetChildren() const override {
-        return {};
-    }
-
-    TGrammarSymbol GetSymbol() const override {
-        return Symbol;
-    }
-
-    const std::string& GetLexem() const override {
-        return Lexem;
-    }
-
-private:
-    std::string Lexem;
-    TGrammarSymbol Symbol;
-};
-
-class TReduceNode : public IASTNode {
-public:
-    TReduceNode(TNonTerminal nonTerminal, std::vector<IASTNode::TPtr>&& children)
-        : Symbol(nonTerminal)
-        , Children(std::move(children))
-    {}
-
-    EType GetType() const override {
-        return EType::Reduce;
-    }
-
-    std::vector<const IASTNode*> GetChildren() const override {
-        std::vector<const IASTNode*> result;
-        for (const auto& child : Children) {
-            result.push_back(child.get());
-        }
-
-        return result;
-    }
-
-    TGrammarSymbol GetSymbol() const override {
-        return Symbol;
-    }
-
-    const std::string& GetLexem() const override {
-        throw std::runtime_error("Reduce node has no lexem");
-    }
-
-private:
-    TGrammarSymbol Symbol;
-    std::vector<IASTNode::TPtr> Children;
-};
-
 /*
 class TStacks {
 public:
