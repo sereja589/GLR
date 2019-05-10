@@ -266,9 +266,9 @@ std::vector<TLrItemSet> ConstructSetsOfItems(const TGrammar& grammar, const std:
 
     while (true) {
         bool added = false;
-        for (const auto& setOfItem : result) {
+        for (size_t i = 0; i < result.size(); ++i) {
             for (const auto& symbol : grammarSymbols) {
-                auto nextSet = GoTo(setOfItem, symbol, grammar, firstForSymbols);
+                auto nextSet = GoTo(result[i], symbol, grammar, firstForSymbols);
                 if (!nextSet.empty() && !std::count(result.begin(), result.end(), nextSet)) {
                     result.push_back(std::move(nextSet));
                     added = true;

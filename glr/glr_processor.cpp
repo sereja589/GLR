@@ -264,7 +264,6 @@ private:
     std::vector<std::shared_ptr<TStateNode>> Result;
 };
 
-
 std::vector<std::shared_ptr<TGLRProcessorWithGSS::TStateNode>> TGLRProcessorWithGSS::Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack) {
     auto reducer = TReducer(*this, tail, rule, deleteCurrentStack);
     reducer.Reduce(tail);

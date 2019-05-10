@@ -6,7 +6,7 @@
 using TNonTerminal = size_t;
 
 using TTerminal = size_t;
-const TTerminal EMPTY_TERMINAL = std::numeric_limits<TTerminal>::max();
+constexpr TTerminal EMPTY_TERMINAL = std::numeric_limits<TTerminal>::max();
 
 bool IsEmpty(TTerminal terminal);
 
@@ -18,7 +18,7 @@ struct TRule {
 };
 
 struct TGrammar {
-    enum ESymbolType {
+    enum class ESymbolType {
         NonTerminal,
         Terminal
     };

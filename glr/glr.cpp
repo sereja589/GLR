@@ -82,6 +82,7 @@ private:
     std::vector<IASTNode::TPtr> Children;
 };
 
+/*
 class TStacks {
 public:
     explicit TStacks(TState startState) {
@@ -277,6 +278,7 @@ private:
     const TGotoTable& GotoTable;
     std::list<TStackPair> Stacks;
 };
+ */
 
 class TGLRParser : public IGLRParser {
 public:
