@@ -1,5 +1,6 @@
 #include "grl.h"
 #include "glr_tables.h"
+#include "glr_processor.h"
 
 #include <unordered_set>
 #include <iostream>
@@ -290,7 +291,8 @@ public:
     }
 
     std::vector<IASTNode::TPtr> Parse(const std::vector<TTerminal>& input) const override {
-        TGLRProcessor processor(Grammar, ActionTable, GotoTable, StartState);
+        // TGLRProcessor processor(Grammar, ActionTable, GotoTable, StartState);
+        TGLRProcessorWithGSS processor(Grammar, ActionTable, GotoTable, StartState);
         for (auto terminal : input) {
             processor.Handle(terminal);
         }

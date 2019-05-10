@@ -9,7 +9,16 @@ include_directories(${CMAKE_SOURCE_DIR})
 
 add_subdirectory(googletest)
 
-set(SOURCE_FILES grammar.h grammar.cpp grl.cpp grl.h graph_structured_stack.h glr_tables.h glr_tables.cpp)
+set(
+    SOURCE_FILES
+    grammar.h
+    grammar.cpp
+    grl.cpp grl.h
+    glr_processor.h
+    glr_processor.cpp
+    glr_tables.h
+    glr_tables.cpp
+)
 
 add_executable(tomita main.cpp ${SOURCE_FILES})
 

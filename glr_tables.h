@@ -63,14 +63,16 @@ class TActionTable {
     friend std::tuple<TActionTable, TGotoTable, TState> BuildTables(const TGrammar& grammar);
 
 public:
-    std::vector<TAction> GetActions(TState state, TTerminal terminal) const {
+    const std::vector<TAction>& GetActions(TState state, TTerminal terminal) const {
+        static const std::vector<TAction> empty = {};
+
         auto itState = Table.find(state);
         if (itState == Table.end()) {
-            return {};
+            return empty;
         }
         auto it = itState->second.find(terminal);
         if (it == itState->second.end()) {
-            return {};
+            return empty;
         }
         return it->second;
     }
