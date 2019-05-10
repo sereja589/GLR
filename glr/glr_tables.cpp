@@ -285,25 +285,7 @@ std::vector<TLrItemSet> ConstructSetsOfItems(const TGrammar& grammar, const std:
 
 std::tuple<TActionTable, TGotoTable, TState> BuildTables(const TGrammar& grammar) {
     auto firstForSymbols = CalcFirstForAllSymbol(grammar);
-    std::cout << "First for symbols: " << std::endl;
-    for (const auto& [symb, firstSymbols] : firstForSymbols) {
-        std::cout << ToString(symb) << ": ";
-        for (const auto& symb : firstSymbols) {
-            std::cout << ToString(symb) << ", ";
-        }
-        std::cout << std::endl;
-    }
     auto setsOfItems = ConstructSetsOfItems(grammar, firstForSymbols);
-
-    std::cout << "set of items:" << std::endl;
-    for (size_t i = 0; i < setsOfItems.size(); ++i) {
-        std::cout << "itemSet " << i << std::endl;
-        const auto& itemSet = setsOfItems[i];
-        for (const auto& item : itemSet) {
-            std::cout << "    " << ToString(item) << std::endl;
-        }
-    }
-    std::cout << std::endl;
 
     TActionTable actionTable;
     TGotoTable gotoTable;
@@ -387,8 +369,6 @@ std::tuple<TActionTable, TGotoTable, TState> BuildTables(const TGrammar& grammar
             break;
         }
     }
-
-    std::cout << "Start state: " << startState << std::endl;
 
     return {actionTable, gotoTable, startState};
 }

@@ -7,7 +7,7 @@
 #include <string>
 
 
-class TGLRProcessorWithGSS {
+class TGLRProcessor {
 public:
     struct TSymbolNode;
 
@@ -39,7 +39,7 @@ public:
     };
 
 public:
-    explicit TGLRProcessorWithGSS(const TGrammar& grammar, const TActionTable& actionTable, const TGotoTable& gotoTable, TState startState)
+    explicit TGLRProcessor(const TGrammar& grammar, const TActionTable& actionTable, const TGotoTable& gotoTable, TState startState)
         : Head(std::make_shared<TStateNode>(startState, 0))
         , Grammar(grammar)
         , ActionTable(actionTable)

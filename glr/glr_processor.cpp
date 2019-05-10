@@ -61,7 +61,7 @@ namespace {
     };
 }
 
-void TGLRProcessorWithGSS::Handle(TTerminal terminal) {
+void TGLRProcessor::Handle(TTerminal terminal) {
     if (Tails.empty()) {
         throw std::runtime_error("Parse error: no stacks");
     }
@@ -70,7 +70,7 @@ void TGLRProcessorWithGSS::Handle(TTerminal terminal) {
     Shift(terminal);
 }
 
-std::vector<IASTNode::TPtr> TGLRProcessorWithGSS::GetAccepted() const {
+std::vector<IASTNode::TPtr> TGLRProcessor::GetAccepted() const {
     std::vector<IASTNode::TPtr> result;
 
     for (const auto& stack : Tails) {
@@ -85,7 +85,7 @@ std::vector<IASTNode::TPtr> TGLRProcessorWithGSS::GetAccepted() const {
 }
 
 
-void TGLRProcessorWithGSS::Shift(TTerminal terminal) {
+void TGLRProcessor::Shift(TTerminal terminal) {
     std::unordered_set<std::shared_ptr<TStateNode>> newTails;
 
     for (const auto& tail : Tails) {
@@ -132,7 +132,7 @@ void TGLRProcessorWithGSS::Shift(TTerminal terminal) {
     Tails = std::move(newTails);
 }
 
-void TGLRProcessorWithGSS::ReduceAll(TTerminal terminal) {
+void TGLRProcessor::ReduceAll(TTerminal terminal) {
     std::queue<std::shared_ptr<TStateNode>> reduceQueue;
     for (const auto& tail : Tails) {
         reduceQueue.push(tail);
@@ -184,9 +184,9 @@ void TGLRProcessorWithGSS::ReduceAll(TTerminal terminal) {
     }
 }
 
-class TGLRProcessorWithGSS::TReducer {
+class TGLRProcessor::TReducer {
 public:
-    TReducer(TGLRProcessorWithGSS& self, const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStacks)
+    TReducer(TGLRProcessor& self, const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStacks)
         : Self(self)
         , NonTerminal(rule.Left)
         , RemainingRightPart(rule.Right.size())
@@ -254,7 +254,7 @@ public:
     }
 
 private:
-    TGLRProcessorWithGSS& Self;
+    TGLRProcessor& Self;
     const TNonTerminal NonTerminal;
     size_t RemainingRightPart;
     std::shared_ptr<TStateNode> Tail;
@@ -264,13 +264,13 @@ private:
     std::vector<std::shared_ptr<TStateNode>> Result;
 };
 
-std::vector<std::shared_ptr<TGLRProcessorWithGSS::TStateNode>> TGLRProcessorWithGSS::Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack) {
+std::vector<std::shared_ptr<TGLRProcessor::TStateNode>> TGLRProcessor::Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack) {
     auto reducer = TReducer(*this, tail, rule, deleteCurrentStack);
     reducer.Reduce(tail);
     return std::move(reducer.GetResult());
 }
 
-std::shared_ptr<TGLRProcessorWithGSS::TStateNode> TGLRProcessorWithGSS::FindNode(TState state, size_t level) {
+std::shared_ptr<TGLRProcessor::TStateNode> TGLRProcessor::FindNode(TState state, size_t level) {
     if (level < Levels.size()) {
         const auto& levelNodes = Levels[level];
         auto it = levelNodes.find(state);
@@ -283,6 +283,6 @@ std::shared_ptr<TGLRProcessorWithGSS::TStateNode> TGLRProcessorWithGSS::FindNode
     }
 }
 
-void TGLRProcessorWithGSS::DeleteStack(const std::shared_ptr<TStateNode>& tail) {
+void TGLRProcessor::DeleteStack(const std::shared_ptr<TStateNode>& tail) {
     Tails.erase(tail);
 }
