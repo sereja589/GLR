@@ -1,144 +1,8 @@
 #include <glr/glr.h>
 #include <tuple>
 #include <gtest/gtest.h>
+#include "utils.h"
 
-namespace {
-    class TShiftNode : public IASTNode {
-    public:
-        TShiftNode(const std::string& lexem, TTerminal terminal)
-            : Lexem(lexem), Symbol(terminal) {
-        }
-
-        EType GetType() const override {
-            return EType::Shift;
-        }
-
-        std::vector<const IASTNode*> GetChildren() const override {
-            return {};
-        }
-
-        TGrammarSymbol GetSymbol() const override {
-            return Symbol;
-        }
-
-        const std::string& GetLexem() const override {
-            return Lexem;
-        }
-
-    private:
-        std::string Lexem;
-        TGrammarSymbol Symbol;
-    };
-
-    class TReduceNode : public IASTNode {
-    public:
-        TReduceNode(TNonTerminal nonTerminal)
-            : Symbol(nonTerminal)
-        {}
-
-        EType GetType() const override {
-            return EType::Reduce;
-        }
-
-        std::vector<const IASTNode*> GetChildren() const override {
-            std::vector<const IASTNode*> result;
-            for (const auto& child : Children) {
-                result.push_back(child.get());
-            }
-
-            return result;
-        }
-
-        TGrammarSymbol GetSymbol() const override {
-            return Symbol;
-        }
-
-        const std::string& GetLexem() const override {
-            throw std::runtime_error("Reduce node has no lexem");
-        }
-
-        void AddChild(IASTNode::TPtr&& node) {
-            Children.push_back(std::move(node));
-        }
-
-    private:
-        TGrammarSymbol Symbol;
-        std::vector<IASTNode::TPtr> Children = {};
-    };
-
-    class TTreeBuilder {
-    public:
-        TTreeBuilder& AddShiftChild(const std::string& lexem, TTerminal terminal) {
-            return AddChild<TShiftNode>(false, lexem, terminal);
-        }
-
-        TTreeBuilder& AddReduceChild(TNonTerminal nonTerminal) {
-            return AddChild<TReduceNode>(true, nonTerminal);
-        }
-
-        TTreeBuilder& Root(size_t nonTerminal) {
-            assert(Root_ == nullptr);
-            Root_ = std::make_shared<TReduceNode>(nonTerminal);
-            Stack.push_back(Root_.get());
-            return *this;
-        }
-
-        TTreeBuilder& End() {
-            Stack.pop_back();
-            return *this;
-        }
-
-        IASTNode::TPtr Get() {
-            assert(Stack.size() == 1);
-            return std::move(Root_);
-        }
-
-    private:
-        template <typename T, typename... TArgs>
-        TTreeBuilder& AddChild(bool addToStack, TArgs&&... args) {
-            auto node = std::make_shared<T>(std::forward<TArgs>(args)...);
-            auto rawNode = node.get();
-            dynamic_cast<TReduceNode*>(Stack.back())->AddChild(std::move(node));
-            if (addToStack) {
-                Stack.push_back(rawNode);
-            }
-            return *this;
-        }
-
-    private:
-        IASTNode::TPtr Root_ = nullptr;
-        std::vector<IASTNode*> Stack;
-    };
-
-    bool CompareTree(const IASTNode* lhs, const IASTNode* rhs) {
-        if (lhs->GetType() != rhs->GetType()) {
-            return false;
-        }
-
-        switch (lhs->GetType()) {
-            case IASTNode::EType::Shift:
-                return lhs->GetLexem() == rhs->GetLexem() && lhs->GetSymbol() == rhs->GetSymbol();
-            case IASTNode::EType::Reduce: {
-                if (lhs->GetSymbol() != rhs->GetSymbol()) {
-                    return false;
-                }
-                auto lhsChildren = lhs->GetChildren();
-                auto rhsChildren = rhs->GetChildren();
-                if (lhsChildren.size() != rhsChildren.size()) {
-                    return false;
-                }
-                for (size_t i = 0; i < lhsChildren.size(); ++i) {
-                    if (!CompareTree(lhsChildren[i], rhsChildren[i])) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            case IASTNode::EType::LocalAmbiguityPacking:
-                throw std::runtime_error("Not implemented");
-        }
-    }
-}
 
 std::vector<TTerminal> ToTerminals(const std::vector<std::string>& input, const std::unordered_map<std::string, TTerminal>& terminals) {
     std::vector<TTerminal> result;
@@ -386,7 +250,7 @@ TEST(LrParserTest, TestGLR1) {
 
     auto input = ToTerminals({"id", "+", "id", "+", "id"}, terminals);
     auto trees = parser->Parse(input);
-    EXPECT_EQ(trees.size(), 2);
+    EXPECT_EQ(CountTrees(trees), 2);
 
     auto expectedTree1 = TTreeBuilder()
         .Root(0)
@@ -431,12 +295,12 @@ TEST(LrParserTest, TestGLR1) {
         }
     }
 
-    EXPECT_EQ(cnt1, 1);
-    EXPECT_EQ(cnt2, 1);
+    EXPECT_TRUE(ContainsTree(trees, expectedTree1.get()));
+    EXPECT_TRUE(ContainsTree(trees, expectedTree2.get()));
 
-    input = ToTerminals({"id", "+", "id", "+", "id", "+", "id", "+", "id"}, terminals);
+    input = ToTerminals({"id", "+", "id", "+", "id", "+", "id"}, terminals);
     trees = parser->Parse(input);
-    EXPECT_EQ(trees.size(), 14);
+    EXPECT_EQ(CountTrees(trees), 5);
 }
 
 TEST(LrParserTest, TestGlr2) {
@@ -465,7 +329,7 @@ TEST(LrParserTest, TestGlr2) {
     auto input = ToTerminals({"if", "condition", "then", "if", "condition", "then", "elementary_statement", "else", "elementary_statement"}, terminals);
 
     auto trees = parser->Parse(input);
-    EXPECT_EQ(trees.size(), 2);
+    EXPECT_EQ(CountTrees(trees), 2);
 
     auto expectedTree1 = TTreeBuilder()
         .Root(0)
@@ -514,10 +378,57 @@ TEST(LrParserTest, TestGlr2) {
         }
     }
 
-    EXPECT_EQ(cnt1, 1);
-    EXPECT_EQ(cnt2, 1);
+    EXPECT_TRUE(ContainsTree(trees, expectedTree1.get()));
+    EXPECT_TRUE(ContainsTree(trees, expectedTree2.get()));
 
     input = ToTerminals({"if", "condition", "then", "if", "condition", "then", "if", "condition", "then", "elementary_statement", "else", "elementary_statement", "else", "elementary_statement"}, terminals);
     trees = parser->Parse(input);
-    EXPECT_EQ(trees.size(), 3);
+    EXPECT_EQ(CountTrees(trees), 3);
+}
+
+TEST(LrParserTest, TestLocalAmbiguityPacking) {
+    TGrammar grammar;
+    grammar.StartNonTerminal = 0;
+
+    std::unordered_map<std::string, TTerminal> terminals = {
+        {"a", 4},
+    };
+
+    grammar.Rules.push_back({0, {1}});
+    grammar.Rules.push_back({1, {2}});
+    grammar.Rules.push_back({1, {3}});
+    grammar.Rules.push_back({2, {terminals["a"]}});
+    grammar.Rules.push_back({3, {terminals["a"]}});
+
+    grammar.SymbolTypes.resize(5);
+    for (auto nonTerminal : {0, 1, 2, 3}) {
+        grammar.SymbolTypes[nonTerminal] = TGrammar::ESymbolType::NonTerminal;
+    }
+    for (const auto& terminal : terminals) {
+        grammar.SymbolTypes[terminal.second] = TGrammar::ESymbolType::Terminal;
+    }
+
+    auto parser = IGLRParser::Create(grammar);
+
+    auto input = ToTerminals({"a"}, terminals);
+    auto trees = parser->Parse(input);
+    EXPECT_EQ(trees.size(), 1);
+
+    auto expectedTree = TTreeBuilder()
+        .Root(0)
+            .AddLocalAmbiguity(1)
+                .AddReduceChild(1)
+                    .AddReduceChild(2)
+                        .AddShiftChild("", terminals["a"])
+                    .End()
+                .End()
+                .AddReduceChild(1)
+                    .AddReduceChild(3)
+                        .AddShiftChild("", terminals["a"])
+                    .End()
+                .End()
+            .End()
+        .Get();
+
+    EXPECT_TRUE(CompareTree(trees[0].get(), expectedTree.get()));
 }

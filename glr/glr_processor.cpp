@@ -59,6 +59,51 @@ namespace {
         TGrammarSymbol Symbol;
         std::vector<IASTNode::TPtr> Children;
     };
+
+    class TLocalAmbiguityPackingNode : public IASTNode {
+    public:
+        TLocalAmbiguityPackingNode(TGrammarSymbol symbol, std::vector<IASTNode::TPtr> nodes = {})
+            : Symbol(symbol)
+            , Children(std::move(nodes))
+        {
+        }
+
+        EType GetType() const override {
+            return EType::LocalAmbiguityPacking;
+        }
+
+        std::vector<const IASTNode*> GetChildren() const override {
+            std::vector<const IASTNode*> result;
+            for (const auto& child : Children) {
+                result.push_back(child.get());
+            }
+
+            return result;
+        }
+
+        TGrammarSymbol GetSymbol() const override {
+            return Symbol;
+        }
+
+        const std::string& GetLexem() const override {
+            throw std::runtime_error("Local ambiguity packing node has no lexem");
+        }
+
+        void AddNode(const IASTNode::TPtr& node) {
+            Children.push_back(node);
+        }
+
+        void Merge(const TLocalAmbiguityPackingNode& packingNode) {
+            for (const auto& node : packingNode.Children) {
+                Children.push_back(node);
+            }
+        }
+
+
+    private:
+        TGrammarSymbol Symbol;
+        std::vector<IASTNode::TPtr> Children;
+    };
 }
 
 void TGLRProcessor::Handle(TTerminal terminal) {
@@ -88,6 +133,8 @@ std::vector<IASTNode::TPtr> TGLRProcessor::GetAccepted() const {
 void TGLRProcessor::Shift(TTerminal terminal) {
     std::unordered_set<std::shared_ptr<TStateNode>> newTails;
 
+    auto astNode = std::make_shared<TShiftNode>("", terminal);
+
     for (const auto& tail : Tails) {
         if (tail->Accepted) {
             newTails.insert(tail);
@@ -108,7 +155,6 @@ void TGLRProcessor::Shift(TTerminal terminal) {
         if (!shiftFound) {
             throw std::runtime_error("Not found shift action");
         }
-        auto astNode = std::make_shared<TShiftNode>("", terminal);
         auto symbolNode = std::make_shared<TSymbolNode>(astNode);
         symbolNode->Prev = tail;
         tail->Next.insert(symbolNode.get());
@@ -141,6 +187,10 @@ void TGLRProcessor::ReduceAll(TTerminal terminal) {
     while (!reduceQueue.empty()) {
         auto currentStack = reduceQueue.front();
         reduceQueue.pop();
+        if (!Tails.count(currentStack)) {
+            /// In the case of several the same nodes in the stack
+            continue;
+        }
         const auto& actions = ActionTable.GetActions(currentStack->Value, terminal);
         if (actions.empty()) {
             DeleteStack(currentStack);
@@ -151,7 +201,7 @@ void TGLRProcessor::ReduceAll(TTerminal terminal) {
             const auto& action = actions.front();
             switch (action.GetType()) {
                 case EActionType::Reduce: {
-                    auto stacks = Reduce(currentStack, Grammar.Rules[action.GetRuleId()], true);
+                    auto stacks = Reduce(currentStack, Grammar.Rules[action.GetRuleId()], true, false);
                     for (const auto& newStack : stacks) {
                         reduceQueue.push(newStack);
                     }
@@ -173,7 +223,14 @@ void TGLRProcessor::ReduceAll(TTerminal terminal) {
                 throw std::runtime_error("There are other actions along with accept action");
             } else if (action.GetType() == EActionType::Reduce) {
                 bool deleteCurrentStack = (i == actions.size() - 1 && !wasShift);
-                auto stacks = Reduce(currentStack, Grammar.Rules[action.GetRuleId()], deleteCurrentStack);
+                bool disableReduce = false;
+                if (wasShift && i == actions.size() - 1) {
+                    disableReduce = true;
+                }
+                if (!wasShift && actions.size() > 1 && i == actions.size() - 2 && actions[i + 1].GetType() == EActionType::Shift) {
+                    disableReduce = true;
+                }
+                auto stacks = Reduce(currentStack, Grammar.Rules[action.GetRuleId()], deleteCurrentStack, disableReduce);
                 for (const auto& newStack : stacks) {
                     reduceQueue.push(newStack);
                 }
@@ -186,13 +243,14 @@ void TGLRProcessor::ReduceAll(TTerminal terminal) {
 
 class TGLRProcessor::TReducer {
 public:
-    TReducer(TGLRProcessor& self, const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStacks)
+    TReducer(TGLRProcessor& self, const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStacks, bool disableReduce)
         : Self(self)
         , NonTerminal(rule.Left)
         , RemainingRightPart(rule.Right.size())
         , Tail(tail)
         , Level(Tail->Level)
         , DeleteCurrentStacks(deleteCurrentStacks)
+        , DisableReduce(disableReduce)
     {
     }
 
@@ -214,22 +272,25 @@ public:
             bool created = false;
             if (stateNode == nullptr) {
                 stateNode = std::make_shared<TStateNode>(*nextState, Level);
+                Self.Levels[Level][*nextState] = stateNode;
                 created = true;
             }
             symbolNode->Next = stateNode.get();
             stateNode->Prev.insert(symbolNode);
             current->Next.insert(symbolNode.get());
             symbolNode->Prev = current;
-            Result.push_back(stateNode);
             if (created) {
                 Self.Tails.insert(stateNode);
             } else if (stateNode == Tail) {
-                DeleteCurrentStacks = false;
+                TailIsUsed = true;
             }
+            Result.push_back(stateNode);
 
             if (DeleteCurrentStacks && current == Tail) {
                 Self.Tails.erase(current);
             }
+
+            Self.TryPackLocalAmbiguity(symbolNode);
 
             return;
         }
@@ -237,15 +298,31 @@ public:
         --RemainingRightPart;
         auto prevNodes = current->Prev;
         for (auto& symbolNode : prevNodes) {
+            if (current == Tail && symbolNode->WaitForShift) {
+                continue;
+            }
+            if (symbolNode->Prev == nullptr) {
+                continue;
+            }
             const auto& stateNode = symbolNode->Prev;
             SymbolPath.push_back(symbolNode->Tree);
             Reduce(stateNode);
             SymbolPath.pop_back();
+            if (DisableReduce && current == Tail) {
+                symbolNode->WaitForShift = true;
+            }
+            symbolNode->Reduced = true;
         }
         ++RemainingRightPart;
 
-        if (DeleteCurrentStacks && current == Tail) {
-            Self.Tails.erase(current);
+        if (current == Tail && DeleteCurrentStacks) {
+            if (!TailIsUsed) {
+                Self.Tails.erase(current);
+            } else {
+                for (auto& symbolNode : prevNodes) {
+                    current->Prev.erase(symbolNode);
+                }
+            }
         }
     }
 
@@ -259,15 +336,73 @@ private:
     size_t RemainingRightPart;
     std::shared_ptr<TStateNode> Tail;
     const size_t Level;
-    bool DeleteCurrentStacks;
+    const bool DeleteCurrentStacks;
+    const bool DisableReduce;
+    bool TailIsUsed = false;
     std::vector<IASTNode::TPtr> SymbolPath;
     std::vector<std::shared_ptr<TStateNode>> Result;
 };
 
-std::vector<std::shared_ptr<TGLRProcessor::TStateNode>> TGLRProcessor::Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack) {
-    auto reducer = TReducer(*this, tail, rule, deleteCurrentStack);
+std::vector<std::shared_ptr<TGLRProcessor::TStateNode>> TGLRProcessor::Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack, bool disableReduce) {
+    auto reducer = TReducer(*this, tail, rule, deleteCurrentStack, disableReduce);
     reducer.Reduce(tail);
     return std::move(reducer.GetResult());
+}
+
+void TGLRProcessor::TryPackLocalAmbiguity(const std::shared_ptr<TSymbolNode>& symbolNode) {
+    if (symbolNode->Tree->GetType() != IASTNode::EType::Reduce) {
+        return;
+    }
+
+    if (symbolNode->Reduced) {
+        return;
+    }
+
+    auto left = symbolNode->Prev;
+    auto right = symbolNode->Next;
+
+    std::vector<std::shared_ptr<TSymbolNode>> candidatesForPacking;
+
+    for (const auto& current : right->Prev) {
+        if ((current->Tree->GetType() == IASTNode::EType::Reduce || current->Tree->GetType() == IASTNode::EType::LocalAmbiguityPacking) && current->Prev == left && current->Tree->GetSymbol() == symbolNode->Tree->GetSymbol()) {
+            candidatesForPacking.push_back(current);
+        }
+    }
+
+    if (candidatesForPacking.size() <= 1) {
+        return;
+    }
+
+    for (const auto& node : candidatesForPacking) {
+        if (node->Reduced) {
+            return;
+        }
+    }
+
+    auto packingNode = std::make_shared<TLocalAmbiguityPackingNode>(symbolNode->Tree->GetSymbol());
+
+    for (const auto& node : candidatesForPacking) {
+        if (node->Tree->GetType() == IASTNode::EType::Reduce) {
+            packingNode->AddNode(node->Tree);
+        } else if (node->Tree->GetType() == IASTNode::EType::LocalAmbiguityPacking) {
+            packingNode->Merge(dynamic_cast<const TLocalAmbiguityPackingNode&>(*node->Tree));
+        } else {
+            throw std::runtime_error("Node type is not suitable for packing");
+        }
+    }
+
+    for (const auto& node : candidatesForPacking) {
+        node->Prev->Next.erase(node.get());
+        right->Prev.erase(node);
+        node->Prev = nullptr;
+        node->Next = nullptr;
+    }
+
+    auto stackPackingNode = std::make_shared<TSymbolNode>(std::move(packingNode));
+    stackPackingNode->Prev = left;
+    left->Next.insert(stackPackingNode.get());
+    stackPackingNode->Next = right;
+    right->Prev.insert(stackPackingNode);
 }
 
 std::shared_ptr<TGLRProcessor::TStateNode> TGLRProcessor::FindNode(TState state, size_t level) {

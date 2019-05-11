@@ -18,6 +18,12 @@ public:
         {
         }
 
+        ~TStateNode() {
+            for (const auto& node : Prev) {
+                node->Next = nullptr;
+            }
+        }
+
         TState Value;
         size_t Level;
 
@@ -33,9 +39,17 @@ public:
         {
         }
 
+        ~TSymbolNode() {
+            if (Prev) {
+                Prev->Next.erase(this);
+            }
+        }
+
         IASTNode::TPtr Tree;
         std::shared_ptr<TStateNode> Prev;
         TStateNode* Next = nullptr;
+        bool WaitForShift = false;    /// Mark true after reduce this stack
+        bool Reduced = false;
     };
 
 public:
@@ -59,9 +73,10 @@ private:
 private:
     void ReduceAll(TTerminal terminal);
     void Shift(TTerminal terminal);
-    std::vector<std::shared_ptr<TStateNode>> Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack);
+    std::vector<std::shared_ptr<TStateNode>> Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack, bool disableReduce);
     std::shared_ptr<TStateNode> FindNode(TState state, size_t level);
     void DeleteStack(const std::shared_ptr<TStateNode>& tail);
+    void TryPackLocalAmbiguity(const std::shared_ptr<TSymbolNode>& symbolNode);
 
 private:
     std::shared_ptr<TStateNode> Head;

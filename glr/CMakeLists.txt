@@ -15,6 +15,7 @@ add_library(glr ${SOURCE_FILES})
 set(
     TEST_SOURCE_FILES
     ut/glr_ut.cpp
+    ut/utils.h
 )
 
 add_executable(glr_test ${TEST_SOURCE_FILES} ${SOURCE_FILES})
