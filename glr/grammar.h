@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <unordered_set>
+#include <limits>
 
 using TNonTerminal = size_t;
 

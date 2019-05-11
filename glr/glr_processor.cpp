@@ -302,6 +302,7 @@ public:
                 continue;
             }
             if (symbolNode->Prev == nullptr) {
+                // Node can be packed to local ambiguity node
                 continue;
             }
             const auto& stateNode = symbolNode->Prev;

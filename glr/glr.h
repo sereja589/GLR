@@ -3,7 +3,6 @@
 #include "grammar.h"
 
 #include <vector>
-#include <variant>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
