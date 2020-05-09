@@ -4,7 +4,7 @@
 namespace {
     class TShiftNode : public IASTNode {
     public:
-        TShiftNode(const std::string& lexem, TTerminal terminal)
+        TShiftNode(const std::wstring& lexem, TTerminal terminal)
                 : Lexem(lexem), Symbol(terminal) {
         }
 
@@ -20,12 +20,12 @@ namespace {
             return Symbol;
         }
 
-        const std::string& GetLexem() const override {
+        const std::wstring& GetLexem() const override {
             return Lexem;
         }
 
     private:
-        std::string Lexem;
+        std::wstring Lexem;
         TGrammarSymbol Symbol;
     };
 
@@ -51,7 +51,7 @@ namespace {
             return Symbol;
         }
 
-        const std::string& GetLexem() const override {
+        const std::wstring& GetLexem() const override {
             throw std::runtime_error("Reduce node has no lexem");
         }
 
@@ -85,7 +85,7 @@ namespace {
             return Symbol;
         }
 
-        const std::string& GetLexem() const override {
+        const std::wstring& GetLexem() const override {
             throw std::runtime_error("Local ambiguity packing node has no lexem");
         }
 
@@ -106,13 +106,13 @@ namespace {
     };
 }
 
-void TGLRProcessor::Handle(TTerminal terminal) {
+void TGLRProcessor::Handle(const IGLRParser::TToken& token) {
     if (Tails.empty()) {
         throw std::runtime_error("Parse error: no stacks");
     }
 
-    ReduceAll(terminal);
-    Shift(terminal);
+    ReduceAll(token.Terminal);
+    Shift(token);
 }
 
 std::vector<IASTNode::TPtr> TGLRProcessor::GetAccepted() const {
@@ -130,17 +130,17 @@ std::vector<IASTNode::TPtr> TGLRProcessor::GetAccepted() const {
 }
 
 
-void TGLRProcessor::Shift(TTerminal terminal) {
+void TGLRProcessor::Shift(const IGLRParser::TToken& token) {
     std::unordered_set<std::shared_ptr<TStateNode>> newTails;
 
-    auto astNode = std::make_shared<TShiftNode>("", terminal);
+    auto astNode = std::make_shared<TShiftNode>(token.Lexem, token.Terminal);
 
     for (const auto& tail : Tails) {
         if (tail->Accepted) {
             newTails.insert(tail);
             continue;
         }
-        const auto& actions = ActionTable.GetActions(tail->Value, terminal);
+        const auto& actions = ActionTable.GetActions(tail->Value, token.Terminal);
         TState state = 0;
         bool shiftFound = false;
         for (const auto& action : actions) {

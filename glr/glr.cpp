@@ -32,12 +32,12 @@ public:
         StartState = startState;
     }
 
-    std::vector<IASTNode::TPtr> Parse(const std::vector<TTerminal>& input) const override {
+    std::vector<IASTNode::TPtr> Parse(const std::vector<TToken>& input) const override {
         TGLRProcessor processor(Grammar, ActionTable, GotoTable, StartState);
-        for (auto terminal : input) {
-            processor.Handle(terminal);
+        for (auto token : input) {
+            processor.Handle(token);
         }
-        processor.Handle(EMPTY_TERMINAL);
+        processor.Handle({EMPTY_TERMINAL, L""});
         return processor.GetAccepted();
     }
 

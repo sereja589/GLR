@@ -4,7 +4,7 @@
 
 class TShiftNode : public IASTNode {
 public:
-    TShiftNode(const std::string& lexem, TTerminal terminal)
+    TShiftNode(const std::wstring& lexem, TTerminal terminal)
         : Lexem(lexem), Symbol(terminal) {
     }
 
@@ -20,12 +20,12 @@ public:
         return Symbol;
     }
 
-    const std::string& GetLexem() const override {
+    const std::wstring& GetLexem() const override {
         return Lexem;
     }
 
 private:
-    std::string Lexem;
+    std::wstring Lexem;
     TGrammarSymbol Symbol;
 };
 
@@ -52,7 +52,7 @@ public:
         return Symbol;
     }
 
-    const std::string& GetLexem() const override {
+    const std::wstring& GetLexem() const override {
         throw std::runtime_error("Reduce node has no lexem");
     }
 
@@ -88,7 +88,7 @@ public:
         return Symbol;
     }
 
-    const std::string& GetLexem() const override {
+    const std::wstring& GetLexem() const override {
         throw std::runtime_error("Local ambiguity packing node has no lexem");
     }
 
@@ -103,7 +103,7 @@ private:
 
 class TTreeBuilder {
 public:
-    TTreeBuilder& AddShiftChild(const std::string& lexem, TTerminal terminal) {
+    TTreeBuilder& AddShiftChild(const std::wstring& lexem, TTerminal terminal) {
         return AddChild<TShiftNode>(false, lexem, terminal);
     }
 

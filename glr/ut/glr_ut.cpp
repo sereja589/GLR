@@ -3,12 +3,13 @@
 #include <gtest/gtest.h>
 #include "utils.h"
 
+using TTerminalDict = std::unordered_map<std::wstring, TTerminal>;
 
-std::vector<TTerminal> ToTerminals(const std::vector<std::string>& input, const std::unordered_map<std::string, TTerminal>& terminals) {
-    std::vector<TTerminal> result;
+std::vector<IGLRParser::TToken> ToGlrTokens(const std::vector<std::wstring>& input, const TTerminalDict& terminals) {
+    std::vector<IGLRParser::TToken> result;
     result.reserve(input.size());
     for (const auto& s : input) {
-        result.push_back(terminals.at(s));
+        result.push_back({terminals.at(s), s});
     }
     return result;
 }
@@ -16,11 +17,11 @@ std::vector<TTerminal> ToTerminals(const std::vector<std::string>& input, const 
 TEST(LrParserTest, Test1) {
     TGrammar grammar;
     grammar.StartNonTerminal = 0;
-    std::unordered_map<std::string, TTerminal> terminals = {
-        {"+", 1},
-        {"(", 2},
-        {")", 3},
-        {"id", 4}
+    TTerminalDict terminals = {
+        {L"+", 1},
+        {L"(", 2},
+        {L")", 3},
+        {L"id", 4}
     };
 
     grammar.SymbolTypes.resize(5);
@@ -29,35 +30,33 @@ TEST(LrParserTest, Test1) {
         grammar.SymbolTypes[term.second] = TGrammar::ESymbolType::Terminal;
     }
 
-    grammar.Rules.push_back({0, {0, terminals["+"], 0}});
-    grammar.Rules.push_back({0, {terminals["("], 0, terminals[")"]}});
-    grammar.Rules.push_back({0, {terminals["id"]}});
+    grammar.Rules.push_back({0, {0, terminals[L"+"], 0}});
+    grammar.Rules.push_back({0, {terminals[L"("], 0, terminals[L")"]}});
+    grammar.Rules.push_back({0, {terminals[L"id"]}});
 
     auto parser = IGLRParser::Create(grammar);
 
-    std::vector<TTerminal> input = {
-        terminals["id"], terminals["+"], terminals["("], terminals["id"], terminals["+"], terminals["id"], terminals[")"]
-    };
+    const auto input = ToGlrTokens(std::vector<std::wstring>{L"id", L"+", L"(", L"id", L"+", L"id", L")"}, terminals);
     auto trees = parser->Parse(input);
     EXPECT_EQ(trees.size(), 1);
     auto expectedTree = TTreeBuilder()
         .Root(0)
             .AddReduceChild(0)
-                .AddShiftChild("", terminals["id"])
+                .AddShiftChild(L"id", terminals[L"id"])
             .End()
-            .AddShiftChild("", terminals["+"])
+            .AddShiftChild(L"+", terminals[L"+"])
             .AddReduceChild(0)
-                .AddShiftChild("", terminals["("])
+                .AddShiftChild(L"(", terminals[L"("])
                 .AddReduceChild(0)
                     .AddReduceChild(0)
-                        .AddShiftChild("", terminals["id"])
+                        .AddShiftChild(L"id", terminals[L"id"])
                     .End()
-                    .AddShiftChild("", terminals["+"])
+                    .AddShiftChild(L"+", terminals[L"+"])
                     .AddReduceChild(0)
-                        .AddShiftChild("", terminals["id"])
+                        .AddShiftChild(L"id", terminals[L"id"])
                     .End()
                 .End()
-                .AddShiftChild("", terminals[")"])
+                .AddShiftChild(L")", terminals[L")"])
             .End()
         .Get();
 
@@ -68,12 +67,12 @@ TEST(LrParserTest, Test2) {
     TGrammar grammar;
     grammar.StartNonTerminal = 0;
 
-    std::unordered_map<std::string, TTerminal> terminals = {
-        {"+", 5},
-        {"*", 6},
-        {"(", 7},
-        {")", 8},
-        {"id", 9}
+    TTerminalDict terminals = {
+        {L"+", 5},
+        {L"*", 6},
+        {L"(", 7},
+        {L")", 8},
+        {L"id", 9}
     };
 
     grammar.SymbolTypes.resize(10);
@@ -85,35 +84,33 @@ TEST(LrParserTest, Test2) {
     }
 
     grammar.Rules.push_back({0, {1, 2}});
-    grammar.Rules.push_back({2, {terminals["+"], 1, 2}});
+    grammar.Rules.push_back({2, {terminals[L"+"], 1, 2}});
     grammar.Rules.push_back({2, {}});
     grammar.Rules.push_back({1, {3, 4}});
-    grammar.Rules.push_back({4, {terminals["*"], 3, 4}});
+    grammar.Rules.push_back({4, {terminals[L"*"], 3, 4}});
     grammar.Rules.push_back({4, {}});
-    grammar.Rules.push_back({3, {terminals["("], 0, terminals[")"]}});
-    grammar.Rules.push_back({3, {terminals["id"]}});
+    grammar.Rules.push_back({3, {terminals[L"("], 0, terminals[L")"]}});
+    grammar.Rules.push_back({3, {terminals[L"id"]}});
 
     auto parser = IGLRParser::Create(grammar);
 
-
-    std::vector<TTerminal> input = {terminals["id"], terminals["+"], terminals["id"]};
-
+    auto input = ToGlrTokens(std::vector<std::wstring>{L"id", L"+", L"id"}, terminals);
     auto trees = parser->Parse(input);
     EXPECT_EQ(trees.size(), 1);
     auto expectedTree = TTreeBuilder()
         .Root(0)
             .AddReduceChild(1)
                 .AddReduceChild(3)
-                    .AddShiftChild("", terminals["id"])
+                    .AddShiftChild(L"id", terminals[L"id"])
                 .End()
                 .AddReduceChild(4)
                 .End()
             .End()
             .AddReduceChild(2)
-                .AddShiftChild("", terminals["+"])
+                .AddShiftChild(L"+", terminals[L"+"])
                 .AddReduceChild(1)
                     .AddReduceChild(3)
-                        .AddShiftChild("", terminals["id"])
+                        .AddShiftChild(L"id", terminals[L"id"])
                     .End()
                     .AddReduceChild(4)
                     .End()
@@ -125,28 +122,28 @@ TEST(LrParserTest, Test2) {
 
     EXPECT_TRUE(CompareTree(trees[0].get(), expectedTree.get()));
 
-    input = {terminals["id"], terminals["+"], terminals["id"], terminals["*"], terminals["id"]};
+    input = ToGlrTokens(std::vector<std::wstring>{L"id", L"+", L"id", L"*", L"id"}, terminals);
     trees = parser->Parse(input);
     EXPECT_EQ(trees.size(), 1);
     expectedTree = TTreeBuilder()
         .Root(0)
             .AddReduceChild(1)
                 .AddReduceChild(3)
-                    .AddShiftChild("", terminals["id"])
+                    .AddShiftChild(L"id", terminals[L"id"])
                 .End()
                 .AddReduceChild(4)
                 .End()
             .End()
             .AddReduceChild(2)
-                .AddShiftChild("", terminals["+"])
+                .AddShiftChild(L"+", terminals[L"+"])
                 .AddReduceChild(1)
                     .AddReduceChild(3)
-                        .AddShiftChild("", terminals["id"])
+                        .AddShiftChild(L"id", terminals[L"id"])
                     .End()
                     .AddReduceChild(4)
-                        .AddShiftChild("", terminals["*"])
+                        .AddShiftChild(L"*", terminals[L"*"])
                         .AddReduceChild(3)
-                            .AddShiftChild("", terminals["id"])
+                            .AddShiftChild(L"id", terminals[L"id"])
                         .End()
                         .AddReduceChild(4)
                         .End()
@@ -159,13 +156,13 @@ TEST(LrParserTest, Test2) {
 
     EXPECT_TRUE(CompareTree(trees[0].get(), expectedTree.get()));
 
-    input = {terminals["("], terminals["id"], terminals["+"], terminals["id"]};
+    input = ToGlrTokens(std::vector<std::wstring>{L"(", L"id", L"+", L"id"}, terminals);
     EXPECT_EQ(parser->Parse(input).size(), 0);
 
-    input = {
-        terminals["("], terminals["id"], terminals["+"], terminals["id"], terminals[")"], terminals["*"],
-        terminals["id"], terminals["*"], terminals["id"], terminals["+"], terminals["id"]
-    };
+    input = ToGlrTokens(
+        std::vector<std::wstring>{L"(", L"id", L"+", L"id", L")", L"*", L"id", L"*", L"id", L"+", L"id"},
+        terminals
+    );
     trees = parser->Parse(input);
     EXPECT_EQ(trees.size(), 1);
 
@@ -173,20 +170,20 @@ TEST(LrParserTest, Test2) {
         .Root(0)
             .AddReduceChild(1)
                 .AddReduceChild(3)
-                    .AddShiftChild("", terminals["("])
+                    .AddShiftChild(L"(", terminals[L"("])
                     .AddReduceChild(0)
                         .AddReduceChild(1)
                             .AddReduceChild(3)
-                                .AddShiftChild("", terminals["id"])
+                                .AddShiftChild(L"id", terminals[L"id"])
                             .End()
                             .AddReduceChild(4)
                             .End()
                         .End()
                         .AddReduceChild(2)
-                            .AddShiftChild("", terminals["+"])
+                            .AddShiftChild(L"+", terminals[L"+"])
                             .AddReduceChild(1)
                                 .AddReduceChild(3)
-                                    .AddShiftChild("", terminals["id"])
+                                    .AddShiftChild(L"id", terminals[L"id"])
                                 .End()
                                 .AddReduceChild(4)
                                 .End()
@@ -195,17 +192,17 @@ TEST(LrParserTest, Test2) {
                             .End()
                         .End()
                     .End()
-                    .AddShiftChild("", terminals[")"])
+                    .AddShiftChild(L")", terminals[L")"])
                 .End()
                 .AddReduceChild(4)
-                    .AddShiftChild("", terminals["*"])
+                    .AddShiftChild(L"*", terminals[L"*"])
                     .AddReduceChild(3)
-                        .AddShiftChild("", terminals["id"])
+                        .AddShiftChild(L"id", terminals[L"id"])
                     .End()
                     .AddReduceChild(4)
-                        .AddShiftChild("", terminals["*"])
+                        .AddShiftChild(L"*", terminals[L"*"])
                         .AddReduceChild(3)
-                            .AddShiftChild("", terminals["id"])
+                            .AddShiftChild(L"id", terminals[L"id"])
                         .End()
                         .AddReduceChild(4)
                         .End()
@@ -213,10 +210,10 @@ TEST(LrParserTest, Test2) {
                 .End()
             .End()
             .AddReduceChild(2)
-                .AddShiftChild("", terminals["+"])
+                .AddShiftChild(L"+", terminals[L"+"])
                 .AddReduceChild(1)
                     .AddReduceChild(3)
-                        .AddShiftChild("", terminals["id"])
+                        .AddShiftChild(L"id", terminals[L"id"])
                     .End()
                     .AddReduceChild(4)
                     .End()
@@ -232,13 +229,13 @@ TEST(LrParserTest, Test2) {
 TEST(LrParserTest, TestGLR1) {
     TGrammar grammar;
     grammar.StartNonTerminal = 0;
-    std::unordered_map<std::string, TTerminal> terminals = {
-        {"id", 1},
-        {"+", 2},
+    TTerminalDict terminals = {
+        {L"id", 1},
+        {L"+", 2},
     };
 
-    grammar.Rules.push_back({0, {0, terminals["+"], 0}});
-    grammar.Rules.push_back({0, {terminals["id"]}});
+    grammar.Rules.push_back({0, {0, terminals[L"+"], 0}});
+    grammar.Rules.push_back({0, {terminals[L"id"]}});
 
     grammar.SymbolTypes.resize(3);
     grammar.SymbolTypes[0] = TGrammar::ESymbolType::NonTerminal;
@@ -248,23 +245,23 @@ TEST(LrParserTest, TestGLR1) {
 
     auto parser = IGLRParser::Create(grammar);
 
-    auto input = ToTerminals({"id", "+", "id", "+", "id"}, terminals);
+    auto input = ToGlrTokens({L"id", L"+", L"id", L"+", L"id"}, terminals);
     auto trees = parser->Parse(input);
     EXPECT_EQ(CountTrees(trees), 2);
 
     auto expectedTree1 = TTreeBuilder()
         .Root(0)
             .AddReduceChild(0)
-                .AddShiftChild("", terminals["id"])
+                .AddShiftChild(L"id", terminals[L"id"])
             .End()
-            .AddShiftChild("", terminals["+"])
+            .AddShiftChild(L"+", terminals[L"+"])
             .AddReduceChild(0)
                 .AddReduceChild(0)
-                    .AddShiftChild("", terminals["id"])
+                    .AddShiftChild(L"id", terminals[L"id"])
                 .End()
-                .AddShiftChild("", terminals["+"])
+                .AddShiftChild(L"+", terminals[L"+"])
                 .AddReduceChild(0)
-                    .AddShiftChild("", terminals["id"])
+                    .AddShiftChild(L"id", terminals[L"id"])
                 .End()
             .End()
         .Get();
@@ -273,16 +270,16 @@ TEST(LrParserTest, TestGLR1) {
         .Root(0)
             .AddReduceChild(0)
                 .AddReduceChild(0)
-                    .AddShiftChild("", terminals["id"])
+                    .AddShiftChild(L"id", terminals[L"id"])
                 .End()
-                .AddShiftChild("", terminals["+"])
+                .AddShiftChild(L"+", terminals[L"+"])
                 .AddReduceChild(0)
-                    .AddShiftChild("", terminals["id"])
+                    .AddShiftChild(L"id", terminals[L"id"])
                 .End()
             .End()
-            .AddShiftChild("", terminals["+"])
+            .AddShiftChild(L"+", terminals[L"+"])
             .AddReduceChild(0)
-                .AddShiftChild("", terminals["id"])
+                .AddShiftChild(L"id", terminals[L"id"])
             .End()
         .Get();
 
@@ -298,26 +295,26 @@ TEST(LrParserTest, TestGLR1) {
     EXPECT_TRUE(ContainsTree(trees, expectedTree1.get()));
     EXPECT_TRUE(ContainsTree(trees, expectedTree2.get()));
 
-    input = ToTerminals({"id", "+", "id", "+", "id", "+", "id"}, terminals);
+    input = ToGlrTokens({L"id", L"+", L"id", L"+", L"id", L"+", L"id", L"+", L"id"}, terminals);
     trees = parser->Parse(input);
-    EXPECT_EQ(CountTrees(trees), 5);
+    EXPECT_EQ(CountTrees(trees), 14);
 }
 
 TEST(LrParserTest, TestGlr2) {
     TGrammar grammar;
     grammar.StartNonTerminal = 0;
 
-    std::unordered_map<std::string, TNonTerminal> terminals = {
-        {"if", 1},
-        {"then", 2},
-        {"else", 3},
-        {"condition", 4},
-        {"elementary_statement", 5}
+    TTerminalDict terminals = {
+        {L"if", 1},
+        {L"then", 2},
+        {L"else", 3},
+        {L"condition", 4},
+        {L"elementary_statement", 5}
     };
 
-    grammar.Rules.push_back({0, {terminals["if"], terminals["condition"], terminals["then"], 0}});
-    grammar.Rules.push_back({0, {terminals["if"], terminals["condition"], terminals["then"], 0, terminals["else"], 0}});
-    grammar.Rules.push_back({0, {terminals["elementary_statement"]}});
+    grammar.Rules.push_back({0, {terminals[L"if"], terminals[L"condition"], terminals[L"then"], 0}});
+    grammar.Rules.push_back({0, {terminals[L"if"], terminals[L"condition"], terminals[L"then"], 0, terminals[L"else"], 0}});
+    grammar.Rules.push_back({0, {terminals[L"elementary_statement"]}});
 
     grammar.SymbolTypes.resize(6);
     grammar.SymbolTypes[0] = TGrammar::ESymbolType::NonTerminal;
@@ -326,46 +323,48 @@ TEST(LrParserTest, TestGlr2) {
     }
 
     auto parser = IGLRParser::Create(grammar);
-    auto input = ToTerminals({"if", "condition", "then", "if", "condition", "then", "elementary_statement", "else", "elementary_statement"}, terminals);
+    auto input = ToGlrTokens(
+        {L"if", L"condition", L"then", L"if", L"condition", L"then", L"elementary_statement", L"else", L"elementary_statement"},
+        terminals);
 
     auto trees = parser->Parse(input);
     EXPECT_EQ(CountTrees(trees), 2);
 
     auto expectedTree1 = TTreeBuilder()
         .Root(0)
-            .AddShiftChild("", terminals["if"])
-            .AddShiftChild("", terminals["condition"])
-            .AddShiftChild("", terminals["then"])
+            .AddShiftChild(L"if", terminals[L"if"])
+            .AddShiftChild(L"condition", terminals[L"condition"])
+            .AddShiftChild(L"then", terminals[L"then"])
             .AddReduceChild(0)
-                .AddShiftChild("", terminals["if"])
-                .AddShiftChild("", terminals["condition"])
-                .AddShiftChild("", terminals["then"])
+                .AddShiftChild(L"if", terminals[L"if"])
+                .AddShiftChild(L"condition", terminals[L"condition"])
+                .AddShiftChild(L"then", terminals[L"then"])
                 .AddReduceChild(0)
-                    .AddShiftChild("", terminals["elementary_statement"])
+                    .AddShiftChild(L"elementary_statement", terminals[L"elementary_statement"])
                 .End()
-                .AddShiftChild("", terminals["else"])
+                .AddShiftChild(L"else", terminals[L"else"])
                 .AddReduceChild(0)
-                    .AddShiftChild("", terminals["elementary_statement"])
+                    .AddShiftChild(L"elementary_statement", terminals[L"elementary_statement"])
                 .End()
             .End()
         .Get();
 
     auto expectedTree2 = TTreeBuilder()
         .Root(0)
-            .AddShiftChild("", terminals["if"])
-            .AddShiftChild("", terminals["condition"])
-            .AddShiftChild("", terminals["then"])
+            .AddShiftChild(L"if", terminals[L"if"])
+            .AddShiftChild(L"condition", terminals[L"condition"])
+            .AddShiftChild(L"then", terminals[L"then"])
             .AddReduceChild(0)
-                .AddShiftChild("", terminals["if"])
-                .AddShiftChild("", terminals["condition"])
-                .AddShiftChild("", terminals["then"])
+                .AddShiftChild(L"if", terminals[L"if"])
+                .AddShiftChild(L"condition", terminals[L"condition"])
+                .AddShiftChild(L"then", terminals[L"then"])
                 .AddReduceChild(0)
-                    .AddShiftChild("", terminals["elementary_statement"])
+                    .AddShiftChild(L"elementary_statement", terminals[L"elementary_statement"])
                 .End()
             .End()
-            .AddShiftChild("", terminals["else"])
+            .AddShiftChild(L"else", terminals[L"else"])
             .AddReduceChild(0)
-                .AddShiftChild("", terminals["elementary_statement"])
+                .AddShiftChild(L"elementary_statement", terminals[L"elementary_statement"])
             .End()
         .Get();
 
@@ -381,7 +380,9 @@ TEST(LrParserTest, TestGlr2) {
     EXPECT_TRUE(ContainsTree(trees, expectedTree1.get()));
     EXPECT_TRUE(ContainsTree(trees, expectedTree2.get()));
 
-    input = ToTerminals({"if", "condition", "then", "if", "condition", "then", "if", "condition", "then", "elementary_statement", "else", "elementary_statement", "else", "elementary_statement"}, terminals);
+    input = ToGlrTokens(
+        {L"if", L"condition", L"then", L"if", L"condition", L"then", L"if", L"condition", L"then", L"elementary_statement",
+         L"else", L"elementary_statement", L"else", L"elementary_statement"}, terminals);
     trees = parser->Parse(input);
     EXPECT_EQ(CountTrees(trees), 3);
 }
@@ -390,15 +391,15 @@ TEST(LrParserTest, TestLocalAmbiguityPacking) {
     TGrammar grammar;
     grammar.StartNonTerminal = 0;
 
-    std::unordered_map<std::string, TTerminal> terminals = {
-        {"a", 4},
+    TTerminalDict terminals = {
+        {L"a", 4},
     };
 
     grammar.Rules.push_back({0, {1}});
     grammar.Rules.push_back({1, {2}});
     grammar.Rules.push_back({1, {3}});
-    grammar.Rules.push_back({2, {terminals["a"]}});
-    grammar.Rules.push_back({3, {terminals["a"]}});
+    grammar.Rules.push_back({2, {terminals[L"a"]}});
+    grammar.Rules.push_back({3, {terminals[L"a"]}});
 
     grammar.SymbolTypes.resize(5);
     for (auto nonTerminal : {0, 1, 2, 3}) {
@@ -410,7 +411,7 @@ TEST(LrParserTest, TestLocalAmbiguityPacking) {
 
     auto parser = IGLRParser::Create(grammar);
 
-    auto input = ToTerminals({"a"}, terminals);
+    auto input = ToGlrTokens({L"a"}, terminals);
     auto trees = parser->Parse(input);
     EXPECT_EQ(trees.size(), 1);
 
@@ -419,12 +420,12 @@ TEST(LrParserTest, TestLocalAmbiguityPacking) {
             .AddLocalAmbiguity(1)
                 .AddReduceChild(1)
                     .AddReduceChild(2)
-                        .AddShiftChild("", terminals["a"])
+                        .AddShiftChild(L"a", terminals[L"a"])
                     .End()
                 .End()
                 .AddReduceChild(1)
                     .AddReduceChild(3)
-                        .AddShiftChild("", terminals["a"])
+                        .AddShiftChild(L"a", terminals[L"a"])
                     .End()
                 .End()
             .End()

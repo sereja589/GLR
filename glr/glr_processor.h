@@ -64,7 +64,7 @@ public:
         Levels[0][startState] = Head;
     }
 
-    void Handle(TTerminal terminal);
+    void Handle(const IGLRParser::TToken& token);
     std::vector<IASTNode::TPtr> GetAccepted() const;
 
 private:
@@ -72,7 +72,7 @@ private:
 
 private:
     void ReduceAll(TTerminal terminal);
-    void Shift(TTerminal terminal);
+    void Shift(const IGLRParser::TToken& token);
     std::vector<std::shared_ptr<TStateNode>> Reduce(const std::shared_ptr<TStateNode>& tail, const TRule& rule, bool deleteCurrentStack, bool disableReduce);
     std::shared_ptr<TStateNode> FindNode(TState state, size_t level);
     void DeleteStack(const std::shared_ptr<TStateNode>& tail);
