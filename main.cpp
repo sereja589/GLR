@@ -1,6 +1,5 @@
 #include <iostream>
-#include <glr/glr.h>
+#include <glr/glr_tables.h>
 
 int main() {
-    return 0;
 }

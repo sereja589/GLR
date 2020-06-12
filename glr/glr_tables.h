@@ -77,6 +77,14 @@ public:
         return it->second;
     }
 
+    std::vector<TState> CollectStates() const {
+        std::vector<TState> states;
+        for (const auto& stateActions : Table) {
+            states.push_back(stateActions.first);
+        }
+        return states;
+    }
+
 private:
     std::unordered_map<TState, std::unordered_map<TTerminal, std::vector<TAction>>> Table; // TODO use vector instead first map
 };
